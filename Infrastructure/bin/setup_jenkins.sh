@@ -27,3 +27,19 @@ echo "Setting up Jenkins in project ${GUID}-jenkins from Git Repo ${REPO} for Cl
 # * CLUSTER: the base url of the cluster used (e.g. na39.openshift.opentlc.com)
 
 # To be Implemented by Student
+
+
+echo "Ensure running in correct namespace: ${GUID}-jenkins..."
+oc project ${GUID}-jenkins
+
+oc new-app --template=jenkins-persistent --param-file=params_file/jenkins.params
+
+oc new-build  -D $'FROM docker.io/openshift/jenkins-agent-maven-35-centos7:v3.11\n
+      USER root\nRUN yum -y install skopeo && yum clean all\n
+      USER 1001' --name=jenkins-slave-appdev -n ${GUID}-jenkins
+
+oc new-build ${REPO}#40h --name=mlbparks-pipeline --context-dir=./MLBParks -e GUID=${GUID} -e CLUSTER=${CLUSTER}
+oc new-build ${REPO}#40h --name=nationalparks-pipeline --context-dir=./Nationalparks -e GUID=${GUID} -e CLUSTER=${CLUSTER}
+oc new-build ${REPO}#40h --name=parksmap-pipeline --context-dir=./ParksMap -e GUID=${GUID} -e CLUSTER=${CLUSTER}
+
+
