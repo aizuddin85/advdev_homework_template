@@ -9,12 +9,6 @@ fi
 GUID=$1
 echo "Setting up Nexus in project $GUID-nexus"
 
-oc project $GUID-nexus
-oc process -f ../templates/nexus3.yaml --param-file=params_file/nexus.params | oc create -f -
-
-
-
-
 # Code to set up the Nexus. It will need to
 # * Create Nexus
 # * Set the right options for the Nexus Deployment Config
@@ -35,3 +29,7 @@ oc process -f ../templates/nexus3.yaml --param-file=params_file/nexus.params | o
 # oc new-app -f ../templates/nexus.yaml --param .....
 
 # To be Implemented by Student
+oc project $GUID-nexus
+oc process -f ../templates/nexus3.yaml --param-file=params_file/nexus.params | oc create -f -
+
+
