@@ -2,7 +2,7 @@ apiVersion: template.openshift.io/v1
 kind: Template
 metadata:
   creationTimestamp: null
-  name: mlbparks
+  name: frontend-templates-prod
 objects:
 - apiVersion: apps.openshift.io/v1
   kind: DeploymentConfig
@@ -10,43 +10,33 @@ objects:
     annotations:
       openshift.io/generated-by: OpenShiftNewApp
     creationTimestamp: null
-    generation: 12
+    generation: 4
     labels:
-      app: mlbparks
-    name: mlbparks
+      app: ${FRONTEND_SERVICENAME}
+    name: ${FRONTEND_SERVICENAME}
   spec:
     replicas: 1
-    revisionHistoryLimit: 10
     selector:
-      app: mlbparks
-      deploymentconfig: mlbparks
+      app: ${FRONTEND_SERVICENAME}
+      deploymentconfig: ${FRONTEND_SERVICENAME}
     strategy:
       activeDeadlineSeconds: 21600
-      recreateParams:
-        timeoutSeconds: 600
       resources: {}
-      recreateParams:
+      rollingParams:
         intervalSeconds: 1
         maxSurge: 25%
         maxUnavailable: 25%
-        post:
-          execNewPod:
-            command:
-            - curl
-            - http://mlbparks.${GUID}-parks-dev.svc:8080/ws/data/load/
-            containerName: mlbparks
-          failurePolicy: Ignore
         timeoutSeconds: 600
         updatePeriodSeconds: 1
-      type: Recreate
+      type: Rolling
     template:
       metadata:
         annotations:
           openshift.io/generated-by: OpenShiftNewApp
         creationTimestamp: null
         labels:
-          app: mlbparks
-          deploymentconfig: mlbparks
+          app: ${FRONTEND_SERVICENAME}
+          deploymentconfig: ${FRONTEND_SERVICENAME}
       spec:
         containers:
         - env:
@@ -54,34 +44,9 @@ objects:
             valueFrom:
               configMapKeyRef:
                 key: APPNAME
-                name: mlbparks
-          - name: DB_PASSWORD
-            valueFrom:
-              configMapKeyRef:
-                key: DB_PASSWORD
-                name: mongodb-configs
-          - name: DB_PORT
-            valueFrom:
-              configMapKeyRef:
-                key: DB_PORT
-                name: mongodb-configs
-          - name: DB_USERNAME
-            valueFrom:
-              configMapKeyRef:
-                key: DB_USERNAME
-                name: mongodb-configs
-          - name: DB_HOST
-            valueFrom:
-              configMapKeyRef:
-                key: DB_HOST
-                name: mongodb-configs
-          - name: DB_NAME
-            valueFrom:
-              configMapKeyRef:
-                key: DB_NAME
-                name: mongodb-configs
-          image: docker-registry.default.svc:5000/${GUID}-parks-dev/mlbparks:latest
-          imagePullPolicy: Always
+                name: ${FRONTEND_SERVICENAME}
+          image: docker-registry.default.svc:5000/${GUID}-${MAIN_APPNAME}-${IMG_ENV}/${IMG_NAME}:${IMG_TAG}
+          imagePullPolicy: IfNotPresent
           livenessProbe:
             exec:
               command:
@@ -91,7 +56,7 @@ objects:
             periodSeconds: 10
             successThreshold: 1
             timeoutSeconds: 1
-          name: mlbparks
+          name: ${FRONTEND_SERVICENAME}
           ports:
           - containerPort: 8080
             protocol: TCP
@@ -120,14 +85,20 @@ objects:
     test: false
     triggers:
 - apiVersion: v1
+  data:
+    APPNAME: ${APPNAME}
+  kind: ConfigMap
+  metadata:
+    name: ${FRONTEND_SERVICENAME}
+- apiVersion: v1
   kind: Service
   metadata:
     annotations:
       openshift.io/generated-by: OpenShiftNewApp
     creationTimestamp: null
     labels:
-      app: mlbparks
-    name: mlbparks
+      app: ${ROUTE_NAME}
+    name: ${ROUTE_NAME}
   spec:
     ports:
     - name: 8080-tcp
@@ -143,28 +114,9 @@ objects:
       protocol: TCP
       targetPort: 8778
     selector:
-      app: mlbparks
-      deploymentconfig: mlbparks
+      app: ${FRONTEND_SERVICENAME}
     sessionAffinity: None
     type: ClusterIP
-  status:
-    loadBalancer: {}
-- apiVersion: v1
-  data:
-    DB_HOST: ${MONGODB_HOST}
-    DB_NAME: ${MONGODB_DBNAME}
-    DB_PASSWORD: ${MONGODB_PASS}
-    DB_PORT: ${MONGODB_PORT}
-    DB_USERNAME: ${MONGODB_USER}
-  kind: ConfigMap
-  metadata:
-    name: mongodb-configs
-- apiVersion: v1
-  data:
-    APPNAME: ${APPNAME}
-  kind: ConfigMap
-  metadata:
-    name: mlbparks
 - apiVersion: route.openshift.io/v1
   kind: Route
   metadata:
@@ -172,15 +124,15 @@ objects:
       openshift.io/host.generated: "true"
     creationTimestamp: null
     labels:
-      type: parksmap-backend
-    name: mlbparks
+      app: ${ROUTE_NAME}
+    name: ${ROUTE_NAME}
   spec:
-    host: mlbparks-${GUID}-parks-dev.apps.na311.openshift.opentlc.com
+    host: ${ROUTE_NAME}-${GUID}-${MAIN_APPNAME}-${ENV}.apps.na311.openshift.opentlc.com
     port:
       targetPort: 8080-tcp
     to:
       kind: Service
-      name: mlbparks
+      name: ${ROUTE_NAME}
       weight: 100
     wildcardPolicy: None
 parameters:
@@ -189,33 +141,43 @@ parameters:
   name: GUID
   required: true
   value: 90cd
-- description: MongoDB User
-  displayName: MongoDB User
-  name: MONGODB_USER
+- description: Frontend service name
+  displayName: Frontend service name
+  name: FRONTEND_SERVICENAME
   required: true
-  value: mongodb
-- description: MongoDB Password
-  displayName: MongoDB Password
-  name: MONGODB_PASS
+  value: parksmap
+- description: Route Target 
+  displayName: Route Target
+  name: ROUTE_NAME
   required: true
-  value: mongodb
-- description: MongoDB DB Name
-  displayName: MongoDB DB Name
-  name: MONGODB_DBNAME
+  value: parksmap
+- description: Service Image Tag 
+  displayName: Service Image Tag
+  name: IMG_TAG
   required: true
-  value: parks
-- description: MongoDB Host
-  displayName: MongoDB Host
-  name: MONGODB_HOST
+  value: latest
+- description: Service Image Pull Environment 
+  displayName: Service Image Pull Environment
+  name: IMG_ENV
   required: true
-  value: mongodb
-- description: MongoDB Port
-  displayName: MongoDB Port
-  name: MONGODB_PORT
+  value: dev
+- description: Service Image Name 
+  displayName: Service Image Name
+  name: IMG_NAME
   required: true
-  value: "27017"
+  value: parkmaps
 - description: AppName
   displayName: AppName
   name: APPNAME
   required: true
-  value: "MLB Parks (Dev)"
+  value: "ParksMap (Green)"
+- description: Main Application Name
+  displayName: Main Application Name
+  name: MAIN_APPNAME
+  required: true
+  value: parks
+- description: Environment 
+  displayName: Environment
+  name: ENV
+  required: true
+  value: prod

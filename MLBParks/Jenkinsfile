@@ -13,14 +13,43 @@ podTemplate(
   ]
 ) {
   node('skopeo-pod') {
+    def GUID = '90cd'
+    def CLUSTER = 'na311'
     echo "GUID: ${GUID}"
     echo "CLUSTER: ${CLUSTER}"
-
+    
     // Your Pipeline Code goes here. Make sure to use the ${GUID} and ${CLUSTER} parameters where appropriate
     // You need to build the application in directory `MLBParks`.
     // Also copy "../nexus_settings.xml" to your build directory
     // and replace 'GUID' in the file with your ${GUID} to point to >your< Nexus instance
- 
+    def mvnCmd = "mvn -s ../nexus_settings.xml"
+    stage("Checking out source code") {
+      git branch: '40h', changelog: false, poll: false, url: 'https://github.com/aizuddin85/advdev_homework_template.git'
+    }
+    dir('MLBParks'){
+      def groupId    = getGroupIdFromPom("pom.xml")
+      def artifactId = getArtifactIdFromPom("pom.xml")
+      def version    = getVersionFromPom("pom.xml")
+      def devTag  = "${version}-${BUILD_NUMBER}"
+      def prodTag = "${version}"
+
+      stage("Building Target"){
+        sh "${mvnCmd} clean package -DskipTests=true"
+      }
+      stage("Unit Test"){
+        sh "${mvnCmd} test"
+      }
+      stage("Code Analysis"){
+        sh "${mvnCmd} sonar:sonar http://sonarqube-90cd-sonarqube.apps.na311.openshift.opentlc.com/ -Dsonar.projectName=${JOB_BASE_NAME}-${devTag}"
+      }
+      stage("Publish Artifacts"){
+        sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::http://nexus3.90cd-nexus.svc.cluster.local:8081/repository/releases"
+      }
+      stage("Build & tag Image"){
+        sh "oc delete bc/mlbparks"
+        sh "oc new-build --name="mlbparks" --binary=true  jboss-eap70-openshift:1.7 --to=${GUID}-parks-dev/mlbparks:${devTag} -e MAVEN_MIRROR_URL=http://nexus3-${GUID}-nexus.apps.na311.openshift.opentlc.com/repository/maven-all-public -n ${GUID}-parks-dev"
+        sh "oc start-build mlbparks --follow --from-file=http://nexus3.${GUID}-nexus.svc.cluster.local:8081/repository/releases/com/openshift/evg/roadshow/mlbparks/${version}/mlbparks-${version}.war -n ${GUID}-parks-dev"
+      }
   }
 }
 

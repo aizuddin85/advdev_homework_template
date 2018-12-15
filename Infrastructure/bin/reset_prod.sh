@@ -18,3 +18,7 @@ echo "Resetting Parks Production Environment in project ${GUID}-parks-prod to Gr
 # rollout followed by a Green rollout.
 
 # To be Implemented by Student
+
+oc patch svc/mlbparks -p '{"spec":{"selector":{"app":"mlbparks-green"}}}' -n $GUID-parks-prod
+oc patch svc/nationalparks -p '{"spec":{"selector":{"app":"nationalparks-green"}}}' -n $GUID-parks-prod
+oc patch svc/parksmap -p '{"spec":{"selector":{"app":"parksmap-green"}}}' -n $GUID-parks-prod
