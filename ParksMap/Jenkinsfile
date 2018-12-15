@@ -76,6 +76,7 @@ podTemplate(
           sh "oc patch svc/parkmaps -p '{\"spec\":{\"selector\":{\"app\":\"parkmaps-green\"}}}\' -n ${GUID}-parks-prod"
           sh "oc rollout latest dc/parkmaps-green -n ${GUID}-parks-prod"
         } 
+      }
     }
   }
 }
