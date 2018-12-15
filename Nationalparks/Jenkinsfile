@@ -65,6 +65,7 @@ podTemplate(
         }
         echo "Active Application:          " + activeApp
         echo "Destionation Application:    " + destApp
+        sh "oc set triggers dc/${destApp} --remove-all -n ${GUID}-parks-prod"
         sh "oc tag ${GUID}-parks-dev/nationalparks:${devTag} ${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-dev"
         sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-prod"
         if (destApp == "nationalparks-blue"){
