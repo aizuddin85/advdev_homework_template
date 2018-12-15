@@ -45,10 +45,14 @@ podTemplate(
       stage("Publish Artifacts"){
         sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::http://nexus3.90cd-nexus.svc.cluster.local:8081/repository/releases"
       }
-      stage("Build & tag Image"){
-        sh "oc delete bc/mlbparks | true"
+      stage("Build & Tag Image"){
+        sh "oc delete bc/mlbparks ${GUID}-parks-dev | true"
         sh "oc new-build --name=mlbparks --binary=true  jboss-eap70-openshift:1.7 --to=${GUID}-parks-dev/mlbparks:${devTag} -e MAVEN_MIRROR_URL=http://nexus3-${GUID}-nexus.apps.na311.openshift.opentlc.com/repository/maven-all-public -n ${GUID}-parks-dev"
         sh "oc start-build mlbparks --follow --from-file=http://nexus3.${GUID}-nexus.svc.cluster.local:8081/repository/releases/com/openshift/evg/roadshow/mlbparks/${version}/mlbparks-${version}.war -n ${GUID}-parks-dev"
+        sh "oc tag mlbparks:${devTag} mlbparks:latest -n ${GUID}-parks-dev"
+      }
+      stage("Deploying On Dev"){
+        sh "oc rollout latest dc/mlbparks -n ${GUID}-parks-dev"
       }
     }
   }
