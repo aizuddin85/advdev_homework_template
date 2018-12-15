@@ -40,7 +40,7 @@ podTemplate(
         sh "${mvnCmd} test"
       }
       stage("Code Analysis"){
-        sh "${mvnCmd} sonar:sonar http://sonarqube-90cd-sonarqube.apps.na311.openshift.opentlc.com/ -Dsonar.projectName=${JOB_BASE_NAME}-${devTag}"
+        sh "${mvnCmd} sonar:sonar -Dsonar.host.url=http://sonarqube-90cd-sonarqube.apps.na311.openshift.opentlc.com/ -Dsonar.projectName=${JOB_BASE_NAME}-${devTag}"
       }
       stage("Publish Artifacts"){
         sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::http://nexus3.90cd-nexus.svc.cluster.local:8081/repository/releases"
