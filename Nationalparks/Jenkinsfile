@@ -1,4 +1,4 @@
-// Jenkinsfile for NationalParks
+// Jenkinsfile for nationalparks
 podTemplate(
   label: "skopeo-pod",
   cloud: "openshift",
@@ -13,14 +13,70 @@ podTemplate(
   ]
 ) {
   node('skopeo-pod') {
+    def GUID = '90cd'
+    def CLUSTER = 'na311'
     echo "GUID: ${GUID}"
     echo "CLUSTER: ${CLUSTER}"
-
+    
     // Your Pipeline Code goes here. Make sure to use the ${GUID} and ${CLUSTER} parameters where appropriate
-    // You need to build the application in directory `Nationalparks`.
+    // You need to build the application in directory `nationalparks`.
     // Also copy "../nexus_settings.xml" to your build directory
     // and replace 'GUID' in the file with your ${GUID} to point to >your< Nexus instance
-
+    def mvnCmd = "mvn -s ../nexus_settings.xml"
+    stage("Checking out source code") {
+      git branch: '40h', changelog: false, poll: false, url: 'https://github.com/aizuddin85/advdev_homework_template.git'
+    }
+    dir('nationalparks'){
+      def groupId    = getGroupIdFromPom("pom.xml")
+      def artifactId = getArtifactIdFromPom("pom.xml")
+      def version    = getVersionFromPom("pom.xml")
+      def devTag  = "${version}-${BUILD_NUMBER}"
+      def prodTag = "${version}"
+      def destApp   = "nationalparks-green"
+      def activeApp = ""
+      stage("Building Target"){
+        sh "${mvnCmd} clean package -DskipTests=true"
+      }
+      stage("Unit Test"){
+        sh "${mvnCmd} test"
+      }
+      stage("Code Analysis"){
+        sh "${mvnCmd} sonar:sonar -Dsonar.host.url=http://sonarqube-${GUID}-sonarqube.apps.na311.openshift.opentlc.com/ -Dsonar.projectName=${JOB_BASE_NAME}-${devTag}"
+      }
+      stage("Publish Artifacts"){
+        sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::http://nexus3.${GUID}-nexus.svc.cluster.local:8081/repository/releases"
+      }
+      stage("Build & Tag Image"){
+        sh "oc delete bc nationalparks -n ${GUID}-parks-dev || true"
+        sh "oc new-build --name=nationalparks --binary=true  redhat-openjdk18-openshift:1.2 --to=${GUID}-parks-dev/nationalparks:${devTag} -e MAVEN_MIRROR_URL=http://nexus3-${GUID}-nexus.apps.na311.openshift.opentlc.com/repository/maven-all-public -n ${GUID}-parks-dev"
+        sh "oc start-build nationalparks --follow --from-file=http://nexus3.${GUID}-nexus.svc.cluster.local:8081/repository/releases/com/openshift/evg/roadshow/nationalparks/${version}/nationalparks-${version}.jar -n ${GUID}-parks-dev"
+        sh "oc tag nationalparks:${devTag} nationalparks:latest -n ${GUID}-parks-dev"
+      }
+      stage("Deploying On Dev"){
+        sh "oc rollout latest dc/nationalparks -n ${GUID}-parks-dev"
+      }
+      stage("Copy Image to Nexus"){
+        sh "skopeo copy --src-tls-verify=false --dest-tls-verify=false --src-creds openshift:\$(oc whoami -t) --dest-creds admin:admin123 docker://docker-registry.default.svc.cluster.local:5000/${GUID}-parks-dev/nationalparks:${devTag} docker://nexus-registry.${GUID}-nexus.svc.cluster.local:5000/nationalparks:${devTag}"
+      }
+      stage("Blue/Green Production Deployment"){
+        activeApp = sh(returnStdout: true, script: "oc get svc nationalparks -n \${GUID}-parks-prod -o jsonpath='{ .spec.selector.app }'").trim()
+        if (activeApp == "nationalparks-green"){
+          destApp = "nationalparks-blue"
+        }
+        echo "Active Application:          " + activeApp
+        echo "Destionation Application:    " + destApp
+        sh "oc tag ${GUID}-parks-dev/nationalparks:${devTag} ${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-dev"
+        sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-prod"
+        if (destApp == "nationalparks-blue"){
+          sh "oc patch svc/nationalparks -p '{\"spec\":{\"selector\":{\"app\":\"nationalparks-blue\"}}}\' -n ${GUID}-parks-prod"
+          sh "oc rollout latest dc/nationalparks-blue -n ${GUID}-parks-prod"
+        }
+        if (destApp == "nationalparks-green"){
+          sh "oc patch svc/nationalparks -p '{\"spec\":{\"selector\":{\"app\":\"nationalparks-green\"}}}\' -n ${GUID}-parks-prod"
+          sh "oc rollout latest dc/nationalparks-green -n ${GUID}-parks-prod"
+        }        
+      }
+    }
   }
 }
 
