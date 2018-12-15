@@ -70,7 +70,7 @@ podTemplate(
         sh "oc tag ${GUID}-parks-dev/${destApp}:${prodTag} ${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-dev"
         sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-prod"
         if (destApp == "mlbparks-blue"){
-          sh "oc patch svc/mlbparks -p '{"spec":{"selector":{"app":"mlbparks-blue"}}}' -n ${GUID}-parks-prod"
+          sh "oc patch svc/mlbparks -p \'{"spec":{"selector":{"app":"mlbparks-blue"}}}\' -n ${GUID}-parks-prod"
           sh "oc rollout latest dc/mlbparks-blue -n ${GUID}-parks-prod"
         }
         if (destApp == "mlbparks-green"){
