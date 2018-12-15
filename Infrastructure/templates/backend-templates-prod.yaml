@@ -186,7 +186,7 @@ objects:
       targetPort: 8080-tcp
     to:
       kind: Service
-      name: ${SERVICE_NAME}
+      name: ${ROUTE_NAME}
       weight: 100
     wildcardPolicy: None
 parameters:
