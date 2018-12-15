@@ -34,7 +34,6 @@ podTemplate(
       def prodTag = "${version}"
       def destApp   = "mlbparks-green"
       def activeApp = ""
-/*
       stage("Building Target"){
         sh "${mvnCmd} clean package -DskipTests=true"
       }
@@ -58,7 +57,7 @@ podTemplate(
       }
       stage("Copy Image to Nexus"){
         sh "skopeo copy --src-tls-verify=false --dest-tls-verify=false --src-creds openshift:\$(oc whoami -t) --dest-creds admin:admin123 docker://docker-registry.default.svc.cluster.local:5000/${GUID}-parks-dev/mlbparks:${devTag} docker://nexus-registry.${GUID}-nexus.svc.cluster.local:5000/parks:${devTag}"
-      } */
+      }
       stage("Blue/Green Production Deployment"){
         activeApp = sh(returnStdout: true, script: "oc get svc mlbparks -n \${GUID}-parks-prod -o jsonpath='{ .spec.selector.app }'").trim()
         if (activeApp == "mlbparks-green"){
