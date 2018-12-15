@@ -26,7 +26,7 @@ podTemplate(
     stage("Checking out source code") {
       git branch: '40h', changelog: false, poll: false, url: 'https://github.com/aizuddin85/advdev_homework_template.git'
     }
-    dir('nationalparks'){
+    dir('Nationalparks'){
       def groupId    = getGroupIdFromPom("pom.xml")
       def artifactId = getArtifactIdFromPom("pom.xml")
       def version    = getVersionFromPom("pom.xml")

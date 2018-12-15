@@ -13,6 +13,8 @@ podTemplate(
   ]
 ) {
   node('skopeo-pod') {
+    def GUID = '90cd'
+    def CLUSTER = 'na311'
     echo "GUID: ${GUID}"
     echo "CLUSTER: ${CLUSTER}"
 
@@ -20,7 +22,60 @@ podTemplate(
     // You need to build the application in directory `ParksMap`.
     // Also copy "../nexus_settings.xml" to your build directory
     // and replace 'GUID' in the file with your ${GUID} to point to >your< Nexus instance
-
+    def mvnCmd = "mvn -s ../nexus_settings.xml"
+    stage("Checking out source code") {
+      git branch: '40h', changelog: false, poll: false, url: 'https://github.com/aizuddin85/advdev_homework_template.git'
+    }
+    dir('ParksMap'){
+      def groupId    = getGroupIdFromPom("pom.xml")
+      def artifactId = getArtifactIdFromPom("pom.xml")
+      def version    = getVersionFromPom("pom.xml")
+      def devTag  = "${version}-${BUILD_NUMBER}"
+      def prodTag = "${version}"
+      def destApp   = "parkmaps-green"
+      def activeApp = ""
+      stage("Building Target"){
+        sh "${mvnCmd} clean package spring-boot:repackage -DskipTests -Dcom.redhat.xpaas.repo.redhatga"
+      }
+      stage('Run Unit tests'){
+        sh "${mvnCmd} test"
+      }
+      stage("Code Analysis"){
+        sh "${mvnCmd} sonar:sonar -Dsonar.host.url=http://sonarqube-${GUID}-sonarqube.apps.na311.openshift.opentlc.com/ -Dsonar.projectName=${JOB_BASE_NAME}-${devTag}"
+      }
+      stage("Publish Artifacts"){
+        sh "${mvnCmd} deploy -DskipTests=true -DaltDeploymentRepository=nexus::default::http://nexus3.${GUID}-nexus.svc.cluster.local:8081/repository/releases"
+      }
+      stage("Build & Tag Image"){
+        sh "oc delete bc parkmaps -n ${GUID}-parks-dev || true"
+        sh "oc new-build --name=parkmaps --binary=true  redhat-openjdk18-openshift:1.2 --to=${GUID}-parks-dev/parkmaps:${devTag} -e MAVEN_MIRROR_URL=http://nexus3-${GUID}-nexus.apps.na311.openshift.opentlc.com/repository/maven-all-public -n ${GUID}-parks-dev"
+        sh "oc start-build parkmaps --follow --from-file=http://nexus3.${GUID}-nexus.svc.cluster.local:8081/repository/releases/com/openshift/evg/roadshow/parkmaps/${version}/parkmaps-${version}.jar -n ${GUID}-parks-dev"
+        sh "oc tag parkmaps:${devTag} parkmaps:latest -n ${GUID}-parks-dev"
+      }
+      stage("Deploying On Dev"){
+        sh "oc rollout latest dc/parkmaps -n ${GUID}-parks-dev"
+      }
+      stage("Copy Image to Nexus"){
+        sh "skopeo copy --src-tls-verify=false --dest-tls-verify=false --src-creds openshift:\$(oc whoami -t) --dest-creds admin:admin123 docker://docker-registry.default.svc.cluster.local:5000/${GUID}-parks-dev/parksmap:${devTag} docker://nexus-registry.${GUID}-nexus.svc.cluster.local:5000/parksmap:${devTag}"
+      }
+      stage("Blue/Green Production Deployment"){
+        activeApp = sh(returnStdout: true, script: "oc get svc parkmaps -n \${GUID}-parks-prod -o jsonpath='{ .spec.selector.app }'").trim()
+        if (activeApp == "parkmaps-green"){
+          destApp = "parkmaps-blue"
+        }
+        echo "Active Application:          " + activeApp
+        echo "Destionation Application:    " + destApp
+        sh "oc tag ${GUID}-parks-dev/parkmaps:${devTag} ${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-dev"
+        sh "oc set image dc/${destApp} ${destApp}=docker-registry.default.svc:5000/${GUID}-parks-dev/${destApp}:latest -n ${GUID}-parks-prod"
+        if (destApp == "parkmaps-blue"){
+          sh "oc patch svc/parkmaps -p '{\"spec\":{\"selector\":{\"app\":\"parkmaps-blue\"}}}\' -n ${GUID}-parks-prod"
+          sh "oc rollout latest dc/parkmaps-blue -n ${GUID}-parks-prod"
+        }
+        if (destApp == "parkmaps-green"){
+          sh "oc patch svc/parkmaps -p '{\"spec\":{\"selector\":{\"app\":\"parkmaps-green\"}}}\' -n ${GUID}-parks-prod"
+          sh "oc rollout latest dc/parkmaps-green -n ${GUID}-parks-prod"
+        } 
+    }
   }
 }
 
